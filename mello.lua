@@ -22,7 +22,6 @@ local SCREEN_FRAMERATE = 15
 local screen_dirty = true
 
 local NUM_SAMPLES = 2
-local voice = 0
 
 local detune_param = "detune_cents_"
 local transpose_param = "transpose_"
@@ -214,9 +213,8 @@ function g.key(x, y, z)
     if y == 1 then
       return
     end
-    note_on(voice, a[y][x-1], 1, 0)
-    note_on(voice + 1, b[y][x-1], 1, 1)
-    voice = util.clamp(voice + 2, 0, 64)
+    note_on((y*1000)+x, a[y][x-1], 1, 0)
+    note_on((y*1000)+ x + 128, b[y][x-1], 1, 1)
     print(y,x)
     print(a[y][x-1])
     g:led(x,y,15)
@@ -224,15 +222,13 @@ function g.key(x, y, z)
   end
   
   if z == 0 then
-    note_off(voice - 1, 0)
-    note_off(voice - 2, 1)
-    voice = util.clamp(voice - 2, 0, 64)
+    note_off((y*1000)+ x, 0)
+    note_off((y*1000)+ x + 128, 1)
     g:led(x,y,0)
     g:refresh()
   end
   
 end
-
 function grid_redraw()
   g:all(0)
   g:refresh()
