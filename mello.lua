@@ -13,20 +13,51 @@ engine.name = "Timber"
 
 local g = grid.connect(1)
 
-a = {} -- table of playback rates built by halfsteps on 'strings'
-b = {}
-tuning_a = 440 -- this puts the default playback rate somewhere near A4
-tuning_b = 440 -- a and b are both tuned accoriding to these variables
-
 local SCREEN_FRAMERATE = 15
 local screen_dirty = true
 
 local NUM_SAMPLES = 2
+local voice_ids = {}
 
 local detune_param = "detune_cents_"
 local transpose_param = "transpose_"
 local amp_param = "amp_"
 local play_mode_param = "play_mode_"
+
+local strings = {} -- table of playback rates built by halfsteps on 'strings'
+local tuning_a = 440
+
+local function make_ids()
+  -- make two unique ids for each grid key
+  local i = 0
+  for y=1, g.rows do
+    voice_ids[y] = {}
+    for x=1, g.cols do
+      voice_ids[y][x] = i
+      i = i + 2
+    end
+  end
+end
+
+local function note(halfsteps,f)
+  -- equally spaced 12-note chromatic
+  return ((2 ^ (1/12)) ^ halfsteps) * f
+end
+
+local function retune()
+  for y=8,2,-1 do
+    strings[y] = {}
+    if y>=5 then
+      for x=0,15 do
+        strings[y][x]=note(x, note((8-y) * 5, tuning_a))
+      end
+    else
+      for x=0,15 do
+        strings[y][x]=note(x, note((5 - y) * 7, strings[5][0]))
+      end
+    end
+  end
+end
 
 local function note_on(voice_id, freq, vel, sample_id)
   engine.noteOn(voice_id, freq, vel, sample_id)
@@ -72,33 +103,7 @@ local function set_pitch_bend_all(bend_st)
   engine.pitchBendAll(MusicUtil.interval_to_ratio(bend_st))
 end
 
-function enc(n, delta)
-  if n == 1 then
-    -- turn left (+ sample 0), turn right (+ sample 1)
-    params:delta(amp_param..0, -delta)
-    params:delta(amp_param..1, delta)
-  else
-    if delta > 0 then
-      if params:get(detune_param..(n-2)) == 100 then
-        params:set(detune_param..(n-2), 0)
-        params:delta(transpose_param..(n-2), 1)
-      else
-        params:delta(detune_param..(n-2), delta)
-      end
-    else
-      if params:get(detune_param..(n-2)) == -100 then
-        params:set(detune_param..(n-2), 0)
-        params:delta(transpose_param..(n-2), -1)
-      else
-        params:delta(detune_param..(n-2), delta)
-      end
-    end
-  end
-    
-  screen_dirty = true
-end
-
-function redraw()
+local function redraw()
   screen.clear()
 
   -- draw stuff
@@ -106,7 +111,17 @@ function redraw()
   screen.update()
 end
 
+local function grid_redraw()
+  g:all(0)
+  
+  -- draw stuff
+  
+  g:refresh()
+end
+
 function init()
+  
+  make_ids()
   
   -- Callbacks
   Timber.sample_changed_callback = function(id)
@@ -144,9 +159,6 @@ function init()
   Timber.load_sample(0, _path.audio .. "/common/606/606-BD.wav")
   Timber.load_sample(1, _path.audio .. "/common/606/606-SD.wav")
   
-  params:set(play_mode_param..0, 3)
-  params:set(play_mode_param..1, 3)
-  
   -- UI
   screen.aa(1)
   
@@ -159,77 +171,52 @@ function init()
   end
   screen_refresh_metro:start(1 / SCREEN_FRAMERATE)
   
-  retune_a()
-  retune_b()
+  retune()
   grid_redraw()
 end
-
-function note(halfsteps,f)
-  return ((2 ^ (1/12)) ^ halfsteps) * f
-end
-
-function retune_a()
-  for y=8,2,-1 do
-    a[y] = {}
-    if y>=5 then
-      for x=0,15 do
-        a[y][x]=note(x, note((8-y) * 5, tuning_a))
-      end
-    else
-      for x=0,15 do
-        a[y][x]=note(x, note((5 - y) * 7, a[5][0]))
-      end
-    end
-  end
-end
-
-function retune_b()
-  for y=8,2,-1 do
-    b[y] = {}
-    if y>=5 then
-      for x=0,15 do
-        b[y][x]=note(x, note((8-y) * 5, tuning_b))
-      end
-    else
-      for x=0,15 do
-        b[y][x]=note(x, note((5 - y) * 7, b[5][0]))
-      end
-    end
-  end
-end
-
--- grid tuning:
--- 1 - N/A
--- 2 E
--- 3 A
--- 4 D
--- 5 G
--- 6 D
--- 7 A
--- 8 E
 
 function g.key(x, y, z)
   if z == 1 then
     if y == 1 then
+      -- pitch bend
       return
     end
-    note_on((y*1000)+x, a[y][x-1], 1, 0)
-    note_on((y*1000)+ x + 128, b[y][x-1], 1, 1)
-    print(y,x)
-    print(a[y][x-1])
+    note_on(voice_ids[y][x], strings[y][x-1], 1, 0)
+    note_on(voice_ids[y][x] + 1, strings[y][x-1], 1, 1)
     g:led(x,y,15)
     g:refresh()
   end
   
   if z == 0 then
-    note_off((y*1000)+ x, 0)
-    note_off((y*1000)+ x + 128, 1)
+    note_off(voice_ids[y][x], 0)
+    note_off(voice_ids[y][x] + 1, 1)
     g:led(x,y,0)
     g:refresh()
   end
-  
 end
-function grid_redraw()
-  g:all(0)
-  g:refresh()
+
+function enc(n, delta)
+  if n == 1 then
+    -- turn left (+ sample 0), turn right (+ sample 1)
+    params:delta(amp_param..0, -delta)
+    params:delta(amp_param..1, delta)
+  else
+    -- continuous detune by cents, +/- 48 semitones
+    if delta > 0 then
+      if params:get(detune_param..(n-2)) == 100 then
+        params:set(detune_param..(n-2), 0)
+        params:delta(transpose_param..(n-2), 1)
+      else
+        params:delta(detune_param..(n-2), delta)
+      end
+    else
+      if params:get(detune_param..(n-2)) == -100 then
+        params:set(detune_param..(n-2), 0)
+        params:delta(transpose_param..(n-2), -1)
+      else
+        params:delta(detune_param..(n-2), delta)
+      end
+    end
+  end
+  screen_dirty = true
 end
