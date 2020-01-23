@@ -27,6 +27,12 @@ local play_mode_param = "play_mode_"
 local strings = {} -- table of playback rates built by halfsteps on 'strings'
 local tuning_a = 440
 
+local fade = 0
+local amp_0 = 0
+local amp_1 = 0
+local amp_range_0 = (-48) - amp_0
+local amp_range_1 = (-48) - amp_1
+
 local function make_ids()
   -- make two unique ids for each grid key
   local i = 0
@@ -120,7 +126,6 @@ local function grid_redraw()
 end
 
 function init()
-  
   make_ids()
   
   -- Callbacks
@@ -151,10 +156,21 @@ function init()
     Timber.add_sample_params(i)
   end
   
-  -- equally spaced from -48db and 16db
-  -- quick and dirty "fade" for now
-  params:set(amp_param..0, -16)
-  params:set(amp_param..1, -16)
+  -- overwrite default set-action
+  params:set_action(amp_param..0, 
+    function(value)
+      amp_0 = value
+      amp_range_0 = (-48) - amp_0
+      Timber.views_changed_callback(0)
+    end
+  )
+  params:set_action(amp_param..1, 
+    function(value)
+      amp_1 = value
+      amp_range_1 = (-48) - amp_1
+      Timber.views_changed_callback(1)
+    end
+  )
   
   Timber.load_sample(0, _path.audio .. "/common/606/606-BD.wav")
   Timber.load_sample(1, _path.audio .. "/common/606/606-SD.wav")
@@ -197,9 +213,15 @@ end
 
 function enc(n, delta)
   if n == 1 then
-    -- turn left (+ sample 0), turn right (+ sample 1)
-    params:delta(amp_param..0, -delta)
-    params:delta(amp_param..1, delta)
+    -- turn left = -vol sample 1, turn right = -vol sample 0
+    fade = util.clamp((fade + delta), -100, 100)
+    if fade > 0 then
+      engine.amp(0, (amp_range_0/100) * fade)
+    elseif fade < 0 then
+      engine.amp(1, -(amp_range_1/100) * fade)
+    else
+      -- equal
+    end
   else
     -- continuous detune by cents, +/- 48 semitones
     if delta > 0 then
