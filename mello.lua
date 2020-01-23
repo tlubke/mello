@@ -4,6 +4,9 @@
 -- enc 2 = pitch +/- sample 0
 -- enc 3 = pitch +/- sample 1
 
+
+
+-- VARIABLES
 local Timber = include("timber/lib/timber_engine")
 local MusicUtil = require "musicutil"
 local UI = require "ui"
@@ -18,14 +21,12 @@ local screen_dirty = true
 
 local NUM_SAMPLES = 2
 local voice_ids = {}
+local strings = {} -- table of playback rates built by halfsteps on 'strings'
 
 local detune_param = "detune_cents_"
 local transpose_param = "transpose_"
 local amp_param = "amp_"
 local play_mode_param = "play_mode_"
-
-local strings = {} -- table of playback rates built by halfsteps on 'strings'
-local tuning_a = 440
 
 local fade = 0
 local amp_0 = 0
@@ -33,6 +34,9 @@ local amp_1 = 0
 local amp_range_0 = (-48) - amp_0
 local amp_range_1 = (-48) - amp_1
 
+
+
+-- SETUP FUNCTIONS
 local function make_ids()
   -- make two unique ids for each grid key
   local i = 0
@@ -45,56 +49,19 @@ local function make_ids()
   end
 end
 
-local function note(halfsteps,f)
-  -- equally spaced 12-note chromatic
-  return ((2 ^ (1/12)) ^ halfsteps) * f
+local function note(steps, f)
+  -- equally spaced scale with 12 steps,
+  -- where steps is n steps from frequency f.
+  return ((2 ^ (1/12)) ^ steps) * f
 end
 
 local function retune()
   for y=8,2,-1 do
     strings[y] = {}
-    if y>=5 then
-      for x=0,15 do
-        strings[y][x]=note(x, note((8-y) * 5, tuning_a))
-      end
-    else
-      for x=0,15 do
-        strings[y][x]=note(x, note((5 - y) * 7, strings[5][0]))
-      end
+    for x=1,16 do
+      strings[y][x]=note((x-1), note((8-y) * params:get("tuning_interval"), params:get("tuning_freq")))
     end
   end
-end
-
-local function note_on(voice_id, freq, vel, sample_id)
-  engine.noteOn(voice_id, freq, vel, sample_id)
-  screen_dirty = true
-end
-
-local function note_off(voice_id, sample_id)
-  engine.noteOff(voice_id)
-  screen_dirty = true
-end
-
-local function note_off_all()
-  engine.noteOffAll()
-  screen_dirty = true
-end
-
-local function note_kill_all()
-  engine.noteKillAll()
-  screen_dirty = true
-end
-
-local function set_pressure_voice(voice_id, pressure)
-  engine.pressureVoice(voice_id, pressure)
-end
-
-local function set_pressure_sample(sample_id, pressure)
-  engine.pressureSample(sample_id, pressure)
-end
-
-local function set_pressure_all(pressure)
-  engine.pressureAll(pressure)
 end
 
 local function set_pitch_bend_voice(voice_id, bend_st)
@@ -109,6 +76,9 @@ local function set_pitch_bend_all(bend_st)
   engine.pitchBendAll(MusicUtil.interval_to_ratio(bend_st))
 end
 
+
+
+-- DISPLAYS
 local function redraw()
   screen.clear()
 
@@ -125,6 +95,9 @@ local function grid_redraw()
   g:refresh()
 end
 
+
+
+-- INIT
 function init()
   make_ids()
   
@@ -146,7 +119,32 @@ function init()
   end
   
   -- Add params
-  params:add{type = "number", id = "bend_range", name = "Pitch Bend Range", min = 1, max = 48, default = 2}
+  params:add{
+    type = "number",
+    id = "bend_range",
+    name = "Pitch Bend Range",
+    min = 1,
+    max = 48,
+    default = 2,
+  }
+  
+  params:add{type = "number",
+    id = "tuning_interval",
+    name = "String Interval",
+    min = 1,
+    max = 12,
+    default = 5,
+    action = function(value) retune() end
+  }
+  
+  params:add{type = "number",
+    id = "tuning_freq",
+    name = "Bottom String Freq",
+    min = 20,
+    max = 480,
+    default = 440,
+    action = function(value) retune() end
+  }
   
   params:add_separator()
   
@@ -156,7 +154,7 @@ function init()
     Timber.add_sample_params(i)
   end
   
-  -- overwrite default set-action
+  -- overwrite default set-action for amp control
   params:set_action(amp_param..0, 
     function(value)
       amp_0 = value
@@ -172,8 +170,8 @@ function init()
     end
   )
   
-  Timber.load_sample(0, _path.audio .. "/common/606/606-BD.wav")
-  Timber.load_sample(1, _path.audio .. "/common/606/606-SD.wav")
+  Timber.load_sample(0, _path.audio .. "/tehn/whirl1.aif")
+  Timber.load_sample(1, _path.audio .. "/tehn/whirl2.aif")
   
   -- UI
   screen.aa(1)
@@ -188,29 +186,13 @@ function init()
   screen_refresh_metro:start(1 / SCREEN_FRAMERATE)
   
   retune()
+  redraw()
   grid_redraw()
 end
 
-function g.key(x, y, z)
-  if z == 1 then
-    if y == 1 then
-      -- pitch bend
-      return
-    end
-    note_on(voice_ids[y][x], strings[y][x-1], 1, 0)
-    note_on(voice_ids[y][x] + 1, strings[y][x-1], 1, 1)
-    g:led(x,y,15)
-    g:refresh()
-  end
-  
-  if z == 0 then
-    note_off(voice_ids[y][x], 0)
-    note_off(voice_ids[y][x] + 1, 1)
-    g:led(x,y,0)
-    g:refresh()
-  end
-end
 
+
+-- CONTROLS
 function enc(n, delta)
   if n == 1 then
     -- turn left = -vol sample 1, turn right = -vol sample 0
@@ -241,4 +223,24 @@ function enc(n, delta)
     end
   end
   screen_dirty = true
+end
+
+function g.key(x, y, z)
+  if z == 1 then
+    if y == 1 then
+      -- pitch bend
+      return
+    end
+    engine.noteOn(voice_ids[y][x], strings[y][x], 1, 0)
+    engine.noteOn(voice_ids[y][x] + 1, strings[y][x], 1, 1)
+    g:led(x,y,15)
+    g:refresh()
+  end
+  
+  if z == 0 then
+    engine.noteOff(voice_ids[y][x])
+    engine.noteOff(voice_ids[y][x] + 1)
+    g:led(x,y,0)
+    g:refresh()
+  end
 end
