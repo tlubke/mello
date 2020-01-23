@@ -29,6 +29,7 @@ local amp_param = "amp_"
 local play_mode_param = "play_mode_"
 
 local fade = 0
+local fade_width = 100
 local amp_0 = 0
 local amp_1 = 0
 local amp_range_0 = (-48) - amp_0
@@ -64,6 +65,20 @@ local function retune()
   end
 end
 
+local function adjust_fade()
+  if fade > 0 then
+    engine.amp(0, (amp_range_0/100) * math.abs(fade))
+    engine.amp(1, (amp_1))
+  elseif fade < 0 then
+    engine.amp(0, (amp_0))
+    engine.amp(1, (amp_range_1/100) * math.abs(fade))
+  else
+    engine.amp(0, (amp_0))
+    engine.amp(1, (amp_1))
+  end
+    print(fade)
+end
+
 local function set_pitch_bend_voice(voice_id, bend_st)
   engine.pitchBendVoice(voice_id, MusicUtil.interval_to_ratio(bend_st))
 end
@@ -81,18 +96,8 @@ end
 -- DISPLAYS
 local function redraw()
   screen.clear()
-
   -- draw stuff
-
   screen.update()
-end
-
-local function grid_redraw()
-  g:all(0)
-  
-  -- draw stuff
-  
-  g:refresh()
 end
 
 
@@ -155,10 +160,12 @@ function init()
   end
   
   -- overwrite default set-action for amp control
+  -- (-48db) is min of parameter
   params:set_action(amp_param..0, 
     function(value)
       amp_0 = value
       amp_range_0 = (-48) - amp_0
+      adjust_fade()
       Timber.views_changed_callback(0)
     end
   )
@@ -166,6 +173,7 @@ function init()
     function(value)
       amp_1 = value
       amp_range_1 = (-48) - amp_1
+      adjust_fade()
       Timber.views_changed_callback(1)
     end
   )
@@ -187,23 +195,42 @@ function init()
   
   retune()
   redraw()
-  grid_redraw()
 end
 
 
 
 -- CONTROLS
+function key(n, z)
+  if z == 1 then
+    if n == 1 then
+      
+    elseif n == 2 then
+      if key_down then
+        fade = 0
+      else
+        fade = -fade_width
+      end
+      key_down = true
+      adjust_fade()
+    elseif n == 3 then
+      if key_down then
+        fade = 0
+      else
+        fade = fade_width
+      end
+      key_down = true
+      adjust_fade()
+    end
+  elseif z == 0 then
+    key_down = false
+  end
+end
+
 function enc(n, delta)
   if n == 1 then
     -- turn left = -vol sample 1, turn right = -vol sample 0
-    fade = util.clamp((fade + delta), -100, 100)
-    if fade > 0 then
-      engine.amp(0, (amp_range_0/100) * fade)
-    elseif fade < 0 then
-      engine.amp(1, -(amp_range_1/100) * fade)
-    else
-      -- equal
-    end
+    fade = util.clamp((fade + delta), -fade_width, fade_width)
+    adjust_fade()
   else
     -- continuous detune by cents, +/- 48 semitones
     if delta > 0 then
