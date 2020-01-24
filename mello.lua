@@ -3,6 +3,11 @@
 -- enc 1 = fade between sample 0 - 1
 -- enc 2 = pitch +/- sample 0
 -- enc 3 = pitch +/- sample 1
+--
+-- key 2 = fade 100% sample 0
+-- key 3 = fade 100% sample 1
+-- key 2+3 = 50/50%
+
 
 
 
