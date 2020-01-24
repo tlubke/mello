@@ -8,9 +8,6 @@
 
 -- VARIABLES
 local Timber = include("timber/lib/timber_engine")
-local MusicUtil = require "musicutil"
-local UI = require "ui"
-local Formatters = require "formatters"
 
 engine.name = "Timber"
 
@@ -76,7 +73,6 @@ local function adjust_fade()
     engine.amp(0, (amp_0))
     engine.amp(1, (amp_1))
   end
-    print(fade)
 end
 
 local function set_pitch_bend_voice(voice_id, bend_st)
@@ -95,8 +91,74 @@ end
 
 -- DISPLAYS
 local function redraw()
+  local st_0 = params:get(transpose_param..0)
+  local c_0 = params:get(detune_param..0)
+  local st_1 = params:get(transpose_param..1)
+  local c_1 = params:get(detune_param..1)
+  
+  if st_0 >= 0 then
+    st_0 = "+"..st_0
+  end
+  
+  if st_1 >= 0 then
+    st_1 = "+"..st_1
+  end
+  
+  if c_0 >= 0 then
+    c_0 = "+"..c_0
+  end
+  
+  if c_1 >= 0 then
+    c_1 = "+"..c_1
+  end
+  
   screen.clear()
-  -- draw stuff
+  
+  screen.level(15)
+  
+  screen.move(10, 32)
+  screen.text("L")
+  screen.move(118, 32)
+  screen.text_right("R")
+  
+  screen.move(63,42)
+  screen.text_center("FADE")
+  
+  screen.move(18,32)
+  screen.line_width(1)
+  screen.line(110,32)
+  screen.stroke()
+  
+  -- fade marker on panner
+  screen.move((100/110/2) * fade + 64,28)
+  screen.line_rel(0,7)
+  screen.stroke()
+  
+  screen.level(4)
+  
+  screen.move(18, 24)
+  screen.text("sample 0")
+  screen.move(110, 24)
+  screen.text_right("sample 1")
+  
+  screen.move(26,49)
+  screen.text_center(st_0)
+  screen.move(26,57)
+  screen.text_center("st")
+  screen.move(42,49)
+  screen.text_center(c_0)
+  screen.move(42,57)
+  screen.text_center("c")
+  
+  screen.move(102,49)
+  screen.text_center(st_1)
+  screen.move(102,57)
+  screen.text_center("st")
+  screen.move(86,49)
+  screen.text_center(c_1)
+  screen.move(86,57)
+  screen.text_center("c")
+ 
   screen.update()
 end
 
@@ -182,8 +244,6 @@ function init()
   Timber.load_sample(1, _path.audio .. "/tehn/whirl2.aif")
   
   -- UI
-  screen.aa(1)
-  
   local screen_refresh_metro = metro.init()
   screen_refresh_metro.event = function()
     if screen_dirty then
@@ -224,6 +284,7 @@ function key(n, z)
   elseif z == 0 then
     key_down = false
   end
+  screen_dirty = true
 end
 
 function enc(n, delta)
