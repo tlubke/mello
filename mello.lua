@@ -19,9 +19,6 @@ engine.name = "Timber"
 local g = grid.connect(1)
 local m = midi.connect(1)
 
-local SCREEN_FRAMERATE = 15
-local screen_dirty = true
-
 local NUM_SAMPLES = 2
 local voice_ids = {}
 local strings = {} -- table of playback rates built by halfsteps on 'strings'
@@ -81,22 +78,10 @@ local function adjust_fade()
   end
 end
 
-local function set_pitch_bend_voice(voice_id, bend_st)
-  engine.pitchBendVoice(voice_id, MusicUtil.interval_to_ratio(bend_st))
-end
-
-local function set_pitch_bend_sample(sample_id, bend_st)
-  engine.pitchBendSample(sample_id, MusicUtil.interval_to_ratio(bend_st))
-end
-
-local function set_pitch_bend_all(bend_st)
-  engine.pitchBendAll(MusicUtil.interval_to_ratio(bend_st))
-end
-
 
 
 -- DISPLAYS
-local function redraw()
+function redraw()
   local st_0 = params:get(transpose_param..0)
   local c_0 = params:get(detune_param..0)
   local st_1 = params:get(transpose_param..1)
@@ -192,16 +177,7 @@ function init()
     
   end
   
-  -- Add params
-  params:add{
-    type = "number",
-    id = "bend_range",
-    name = "Pitch Bend Range",
-    min = 1,
-    max = 48,
-    default = 2,
-  }
-  
+  -- Add params 
   params:add{type = "number",
     id = "tuning_interval",
     name = "String Interval",
@@ -250,16 +226,6 @@ function init()
   Timber.load_sample(0, _path.audio .. "/tehn/whirl1.aif")
   Timber.load_sample(1, _path.audio .. "/tehn/whirl2.aif")
   
-  -- UI
-  local screen_refresh_metro = metro.init()
-  screen_refresh_metro.event = function()
-    if screen_dirty then
-      redraw()
-      screen_dirty = false
-    end
-  end
-  screen_refresh_metro:start(1 / SCREEN_FRAMERATE)
-  
   retune()
   redraw()
 end
@@ -291,7 +257,7 @@ function key(n, z)
   elseif z == 0 then
     key_down = false
   end
-  screen_dirty = true
+  redraw()
 end
 
 function enc(n, delta)
@@ -317,7 +283,7 @@ function enc(n, delta)
       end
     end
   end
-  screen_dirty = true
+  redraw()
 end
 
 function g.key(x, y, z)
