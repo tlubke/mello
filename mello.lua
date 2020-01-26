@@ -1,6 +1,6 @@
 -- mello
 --
--- enc 1 = fade between sample 0 - 1
+-- enc 1 = fade sample 0 <-> 1
 -- enc 2 = pitch +/- sample 0
 -- enc 3 = pitch +/- sample 1
 --
@@ -10,13 +10,14 @@
 
 
 
-
 -- VARIABLES
 local Timber = include("timber/lib/timber_engine")
+local Music = require "musicutil"
 
 engine.name = "Timber"
 
 local g = grid.connect(1)
+local m = midi.connect(1)
 
 local SCREEN_FRAMERATE = 15
 local screen_dirty = true
@@ -171,6 +172,7 @@ end
 
 -- INIT
 function init()
+  
   make_ids()
   
   -- Callbacks
@@ -335,5 +337,29 @@ function g.key(x, y, z)
     engine.noteOff(voice_ids[y][x] + 1)
     g:led(x,y,0)
     g:refresh()
+  end
+end
+
+function m.event(data)
+  local msg = midi.to_msg(data)
+  local freq = Music.note_num_to_freq(msg.note)
+  local voice_id
+  
+  -- start after grid ids if they exist
+  if g.rows > 0 then
+    voice_id = voice_ids[g.rows][g.cols] + msg.note
+  else
+    voice_id = msg.note
+  end
+  
+  if msg.type == "note_on" then
+    -- 2nd id is +128 for midi range to assure uniqueness
+    engine.noteOn(voice_id, freq, 1, 0)
+    engine.noteOn(voice_id + 128, freq, 1, 1)
+  elseif msg.type == "note_off" then
+    engine.noteOff(voice_id)
+    engine.noteOff(voice_id + 128)
+  else
+    -- are there more possibilities for note type?
   end
 end
